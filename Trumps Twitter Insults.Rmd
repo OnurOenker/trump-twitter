@@ -1,0 +1,666 @@
+---
+title: "Trump's Twitter Insults from 2014-2021"
+output: 
+  rmdformats::downcute:
+    use_bookdown: TRUE 
+    lightbox: TRUE
+    gallery: TRUE
+    fig_caption: TRUE
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
+```
+
+# Introduction
+
+
+This Notebook focused on Trump’s use of the Twitter platform and how it was used and looking at how Trump used the platform as a white house spokesman!
+
+Trump_Twitter_insults_2015_2021- tweets collected from 09-10-2014 to 06-Jan-2021, the size of the dataset is 10,360 tweets, with about 1329 median tweets per year, and median about 865 tweets per month, these numbers show how much Trump was relying on Twitter to communicate with his followers and supporters and then the friends and enemies, so to speak.
+
+Based on this notebook’s conclusion, I strongly believe that Trump’s strategy was to discredit the mainstream media, restrict their access to presidential information, then replace their reports and even their news with tweets directly published by himself.
+
+I tried to not use the target variable, instead, I am going to create some special variables related to Countries, companies, about personnel I will let the tidytext package work on that?
+
+So let us go ahead and see what this dataset hides for us!
+
+Data Source: [TrumpArchive](https://www.thetrumparchive.com).
+
+## Load libraries
+
+```{r loadlib, echo=T, results='hide', message=F, warning=F}
+library(tidyverse)
+library(plotly)
+library(DT)
+library(tidytext)
+library(ggrepel)
+library(lubridate)
+library(scales)
+library(janitor)
+library(RColorBrewer)
+
+theme_set(theme_light())
+```
+
+## Import data
+
+```{r}
+TrumpTweet <- read_csv("trump_insult_tweets_2014_to_2021.csv") %>% 
+    rename(RNum = X1)
+
+glimpse(TrumpTweet)
+```
+
+```{r}
+datatable(TrumpTweet %>% 
+              count(insult, sort = T),caption = NULL, 
+          options = list(dom='t'))
+```
+We have to change the case, lower case is the best solution for this problem!
+
+
+# Data Screening
+
+
+## To lower case
+```{r}
+TrumpTweet <- TrumpTweet %>% mutate_all(list(str_to_lower))
+datatable(TrumpTweet %>% count(insult, sort = TRUE),
+          caption = NULL,
+          options = list(dom = 't'))
+```
+
+
+## Missing data
+
+```{r}
+sapply(TrumpTweet, function(x) sum(is.na(x)))
+```
+
+We have only two missing data in the target variable
+
+I will remove them while creating new variables Year, Month, Day and The number of characters and number of words!
+
+
+# Tweets per Year and Month
+
+
+## Create new variables (Year, Month, Day)
+
+
+```{r}
+TrumpTweet <- TrumpTweet %>% 
+  filter(!is.na(target)) %>% 
+  mutate( date = ymd(date),
+          year = year(date),
+          month = month(date, label = T),
+          day = wday(date, label = T),
+          NumChar = nchar(tweet),
+          NumWords = str_count(tweet, pattern ="\\w+"))
+
+
+map_dfc(TrumpTweet,anyNA)
+```
+
+```{r}
+glimpse(TrumpTweet)
+```
+
+we have removed the missing data and created new variables, those will help me with the coming chunks.
+
+
+```{r}
+MedianYear <- TrumpTweet %>% select(year) %>% 
+  count(year) %>% summarise(MedianPerYear = round(median(n),1))
+
+MedianMonth <- TrumpTweet %>% select(month) %>% 
+  count(month) %>% summarise(MedianPerMonth = round(median(n),1))
+
+datatable(MedianYerandMonth <- cbind(MedianYear,MedianMonth),
+          caption = NULL,
+          options = list(dom = 't'))
+```
+
+
+```{r}
+datatable(TrumpTweet %>% select(year) %>%
+  count(year),
+          caption = NULL,
+          options = list(dom = 't'))
+```
+
+```{r}
+datatable(TrumpTweet %>% select(month) %>% 
+  count(month),
+          caption = NULL,
+          options = list(dom = 't'))
+```
+
+```{r}
+datatable(TrumpTweet %>% select(date) %>% 
+  count(date, sort = T) %>% top_n(10),
+          caption = NULL,
+          options = list(dom = 't'))
+```
+
+As I said in the introduction, I strongly believe that Trump’s strategy was to discredit the mainstream media, restrict their access to presidential information, then replace their reports and even their news with tweets directly from him.
+
+let us see the tweets of 2020-10-12
+
+```{r}
+datatable(TrumpTweet %>% select(date, tweet) %>% 
+  filter(date == "2020-10-12"),
+          caption = NULL,
+          options = list(dom = 't'))
+```
+
+Strangely, I noticed that we have duplicated tweets same tweet but different target note, is it on purpose to put much note in the target field for one tweet targeting many entities? if yes, that means we have fewer tweets than it 10358!! Or are they re-tweet?
+
+
+```{r}
+datatable(TrumpTweet %>% select(date, tweet, target) %>% 
+  head(20),
+          caption = NULL,
+          options = list(dom = 't'))
+```
+
+I can not know 100% for many reason, mainly because there no time variable and details about the tweets!
+
+No Comment! let us proceed with data Summary!
+
+
+# Data Summary
+
+
+## Number of character vs. Number of words by year (scatter plot)
+
+
+```{r}
+ggplotly(TrumpTweet %>% select(NumChar, NumWords, year) %>% 
+  ggplot(aes(x = NumChar, y = NumWords, col = as.factor(year))) +
+  geom_point() +
+  labs(title = "Number of character vs Number of words by year",
+       x = "Number of Characters",
+       col = "year",
+       y = "Number of words"),tooltip = c("NumChar", "year"))
+```
+
+Not surprisingly! the number of characters and number of words is highly correlated! but we can notice that there are two small clusters, I think will be more clear when I drill more!
+
+
+## Number of characters used (Histgram)
+
+
+```{r}
+ggplotly(TrumpTweet %>% select(NumChar) %>% 
+  ggplot(aes(x = NumChar)) +
+  geom_histogram(fill = "darkred", bins = 30) +
+  labs(title = "Number of characters used",
+       x = "Number of characters"),
+       tooltip = c("NumChar"))
+```
+
+130-140 char and 270-280 char were used more often! knowing that, in most cases, the text content of a Tweet can contain up to 280 characters!
+
+
+## Number of character by year (Boxplot)
+
+
+```{r}
+ggplotly(TrumpTweet %>% select(NumChar, year) %>% 
+  ggplot(aes(x = as.factor(year), y = NumChar)) +
+  geom_boxplot(aes(fill = as.factor(year))) +
+  labs(title = "Number of character by year",
+       x = "Year",
+       fill = "year",
+       y = "Number of Characters"))
+```
+
+
+2018, 2019 and 2020, have the highest number of characters used, of course, there was a political problem from impeachment and protests and finally the election campaigns!!
+
+
+# Countries mentioned in Trump's tweets
+
+
+## Create a new varible country_mentioned
+
+
+```{r}
+TrumpTweet <- 
+    TrumpTweet %>%
+    mutate(country_mentioned = str_extract(tweet, pattern = "china|chinese|russia|iran|north korea|puerto rico|france|germany|ukraine|saudi arabia|mexico")) %>%
+    mutate(country_mentioned = str_replace(
+        country_mentioned, pattern = "chinese",replacement = "china"))
+
+datatable(TrumpTweet %>% count(country_mentioned, sort = T),
+          caption = NULL,
+          options = list(dom = 't'))
+```
+
+I have selected the countries that I believe are the most countries were at the core of Trump administration foreign policy! then I will filter them according to the frequency table result!
+
+
+## Countries are mentioned in Trump’s twitter feed
+
+
+```{r}
+TrumpTweet %>%
+  filter(!is.na(country_mentioned)) %>%
+  group_by(country_mentioned) %>%
+  summarise(Count = n()) %>%
+  ggplot(aes(
+    x = fct_reorder(country_mentioned, Count),
+    Count,
+    label = Count,
+    fill = country_mentioned
+  )) +
+  geom_col() +
+  geom_text(hjust = -0.2) +
+  coord_flip() +
+  theme(legend.position = "none") +
+  scale_fill_manual(
+    values = c(
+      "#d73027",
+      "#a50026",
+      "#f46d43",
+      "#fdae61",
+      "#fee090",
+      "#e0f3f8",
+      "#abd9e9",
+      "#74add1",
+      "#313695",
+      "#4575b4"
+    )
+  ) +
+  labs(title = "Countries are mentioned in Trump’s twitter feed",
+       subtitle = "Bar plot for countries mentioned in his tweets",
+       caption = "Kaggle: All Trump's Twitter insults (2015-2021)",
+       x = "Country Name",
+       y = "Number of tweets")
+```
+
+Russia, China, Mexico, Iran and North korea are the Top 5 countries mentioned by Trump for different reason,
+
+- Russia: Mueller investigation
+
+- China: Trade war
+
+- Mexico: the wall project and Mexican immigrants.
+
+- Iran: Nuclear Deal.
+
+- North Korea: North Korea’s nuclear capabilities.
+
+- Ukraine: Investigate Joe Biden and his son Hunter Biden, and company CrowdStrike in 2019!
+
+
+## Number of tweets by Country per year (Time series)
+
+
+I have selected China, Iran, Russia, Mexico, North Korea, Puerto Rico and Ukraine! that according to how I follow the World news!
+
+```{r}
+SevenCountries <- c("iran",
+                    "china",
+                    "russia",
+                    "ukraine",
+                    "puerto rico",
+                    "north korea",
+                    "mexico")
+
+TrumpTweet %>%
+  filter(
+    !is.na(country_mentioned),
+    country_mentioned %in% SevenCountries
+  ) %>%
+  group_by(year, country_mentioned) %>%
+  summarise(YCount = n()) %>%
+  arrange(year) %>%
+  ggplot(aes(x = year, y = YCount, col = country_mentioned)) +
+  geom_line(size = 1.5) +
+  geom_hline(
+    aes(yintercept = mean(YCount)),
+    size = 1.2,
+    col = "red",
+    alpha = 0.2
+  ) +
+  geom_text(aes(label = YCount), vjust = -0.7, col = "black") +
+  scale_y_continuous(expand = c(0, 100), label = label_number(suffix = " Tweets")) +
+  facet_wrap(vars(country_mentioned)) +
+  theme(legend.position = "none") +
+  scale_color_brewer(palette = "Set2") +
+  labs(
+    title = "Number of tweets by Country per year (Time series)",
+    subtitle = "Facet wrap plot with the Mean",
+    caption = "Kaggle: All Trump's Twitter insults (2015-2021)",
+    x = "Country Name",
+    y = "Number of tweets"
+  )
+```
+
+- Russia: Mueller investigation Special Counsel investigation (2017–2019)
+
+- China: Trade war 2017-2020
+
+- Mexico and Iran and North Korea: Somehow stabilize
+
+- Ukraine: Investigate Joe Biden 2019! before the 2020 election
+
+
+## Number of Characters used, by Country, per year (Time series)
+
+
+```{r}
+TrumpTweet %>%
+  filter(!is.na(country_mentioned),
+         country_mentioned %in% SevenCountries) %>%
+  group_by(country_mentioned, NumChar, year) %>%
+  summarise(TotalChar = sum(NumChar)) %>%
+  arrange(desc(TotalChar)) %>% select(country_mentioned, TotalChar, year) %>%
+  group_by(country_mentioned, year) %>%
+  summarise(GTotalCahr = sum(TotalChar)) %>%
+  arrange(year) %>%
+  ggplot(aes(x = year, y = GTotalCahr, col = country_mentioned)) +
+  geom_line(size = 1.5) +
+  geom_hline(
+    aes(yintercept = mean(GTotalCahr)),
+    size = 1.2,
+    col = "red",
+    alpha = 0.2
+  ) +
+  geom_text(aes(label = comma(round(GTotalCahr), 1)), vjust = -0.7, col = "black") +
+  scale_y_continuous(limits = c(0, 80000), label = label_number(suffix = " Char")) +
+  facet_wrap(vars(country_mentioned), ncol = 2) +
+  theme(legend.position = "none") +
+  scale_color_brewer(palette = "Set2") +
+  labs(
+    title = "Number of Chracters used by Trump, by Country, per year (Time series)",
+    subtitle = "Facet wrap plot (the numbers of characters in the tweets)",
+    caption = "Kaggle: All Trump's Twitter insults (2015-2021)",
+    x = "Country Name",
+    y = "Number of chracters"
+  )
+```
+
+I can add to the above explanation the following, based in this dataset:
+
+- China, Russia, Mexico and Iran: Tweets start by 2015 to the end of his presidency.
+
+- Puerto Rico : From 2017 To 2019.
+
+- North Korea and Ukraine : From 2017 To 2020.
+
+
+## Mean Character and Mean Tweets used!
+
+
+```{r}
+MeanTweetByCountry <- TrumpTweet %>%
+  filter(!is.na(country_mentioned),
+         country_mentioned %in% SevenCountries) %>%
+  group_by(year, country_mentioned) %>%
+  summarise(YCount = n(),
+            totalNchar = round(sum(NumChar / 1000), 1)) %>%
+  arrange(year) %>%
+  group_by(country_mentioned) %>%
+  mutate(round(across(c(YCount, totalNchar), mean, .names = "mean_{.col}"), 0)) %>%
+  mutate(
+    labelYCount = ifelse(YCount == max(YCount), YCount, ''),
+    labeltotalNchar = ifelse(totalNchar == max(totalNchar), paste(totalNchar, "kch"), '')
+  )
+
+ggplot(MeanTweetByCountry) +
+  geom_line(aes(x = year , y = YCount, col = country_mentioned), size = 1.5) +
+  geom_text(aes(x = year , y = YCount, label = labelYCount),
+            size = 3,
+            vjust = -0.5) +
+  geom_hline(aes(yintercept = mean_YCount, col = "orange"), size = 1) +
+  geom_line(aes(x = year , y = totalNchar, col = country_mentioned), size = 1.5) +
+  geom_text(
+    aes(x = year , y = totalNchar, label = labeltotalNchar),
+    size = 3,
+    vjust = -0.5
+  ) +
+  geom_hline(aes(yintercept = mean_totalNchar),
+             col = "black",
+             size = 1) +
+  geom_text(aes(
+    2015.4,
+    mean_totalNchar,
+    label = paste("avg", mean_totalNchar, "kch"),
+    vjust = -0.3
+  )) +
+  geom_text(aes(
+    2015.4,
+    mean_YCount,
+    label = paste("avg", mean_YCount, "tw"),
+    vjust = -0.3
+  )) +
+  facet_wrap(vars(country_mentioned), scale = "free_y", ncol = 3) +
+  theme(legend.position = "none") +
+  labs(
+    title = "Mean Character and Mean Tweets used!, by Country, per year (Time series)",
+    subtitle = "Facet wrap plot (Mean Character and Mean Tweets used!)",
+    caption = "Kaggle: All Trump's Twitter insults (2015-2021)",
+    x = "Country Name",
+    y = "Number of chracters"
+  )
+```
+
+Same plot just to see visually the distance between the mean and the Maximum value!
+
+
+# Companies, TV and Social Medias
+
+
+**GoodYear, Apple, Google, Facebook, Twitter, CNN, Fox, ABC and NBC**
+
+
+```{r}
+TrumpTweet %>%
+  mutate(
+    NumChar = nchar(tweet),
+    companies_mentioned = str_extract(tweet, pattern = "goodyear|apple|google|facebook|twitter|cnn|fox|abc|nbc")
+  ) %>% count(companies_mentioned, sort = T) %>%
+  filter(!is.na(companies_mentioned)) %>%
+  ggplot(aes(x = n, y = fct_reorder(companies_mentioned, n))) +
+  geom_col(aes(fill = companies_mentioned)) +
+  geom_text(aes(label = n), hjust = -0.1) +
+  theme(legend.position = "none") +
+  scale_fill_brewer() +
+  labs(
+    title = "Companies and news and social medias",
+    subtitle = "Plot, what are the most Companies and news ans social medias mentioned",
+    caption = "Kaggle: All Trump's Twitter insults (2015-2021)",
+    x = "Country Name",
+    y = "Number of chracters"
+  )
+```
+
+If you follow the world news! CNN was the most TV and media attacked by Trump! and Trump was attacked by CNN as well. Fox News: like Top 2 but we need some sentiment analysis to see if it was positive or negative, we all are sure it will be positive but we can not say that before completing our job, I wish to have time for this analysis, otherwise, I will keep it for future Notebook!
+
+Then NBC and ABC.
+
+We can see that he was more focused on TVs and less on social media platforms! and noticed that trump’s latest tweets are always on TV.
+
+
+# Text Mining: Word, Bigram, Trigram and Quadgram.
+
+
+By using the tidytext package, I’m going to find the most words used in his tweets, starting by Word, and ending by Quadgram through bigram and trigram.
+
+
+## **Word:**
+
+
+Although the single word (Monogram) cannot give you a complete picture of the meaning behind it because we need to see in which context is used, I will start with Monogram as starting up, just to have an idea about the most words used by Trump!
+
+So then I will use the unnest_tokens and anti_join function from the tidytext package.
+
+```{r}
+TrumpTweet %>% select(tweet) %>%
+  unnest_tokens(word, tweet) %>%
+  anti_join(get_stopwords()) %>%
+  count(word, sort = TRUE) %>%
+  slice_max(n, n = 20) %>%
+  ggplot(aes(
+    x = fct_reorder(word, n),
+    y = n,
+    fill = word
+  )) +
+  geom_col() +
+  coord_flip() +
+  theme(legend.position = "none") +
+  labs(
+    title = "The most word used",
+    subtitle = "Bar plot, The most word used",
+    caption = "Kaggle: All Trump's Twitter insults (2015-2021)",
+    x = "word",
+    y = "Count"
+  )
+```
+
+fake, news, people, just, media and of course democrats and Hillary and crooked!
+
+What interesting to me is the words now, even, nothing and bad! the most important is understanding words in context.
+
+
+## **Bigram:**
+
+
+```{r}
+TrumpTweet %>% select(tweet, year) %>%
+  unnest_tokens(Bigram, tweet, token = "ngrams", n = 2) %>%
+  separate(Bigram, c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word,!word2 %in% stop_words$word) %>%
+  unite(Bigram, word1, word2, sep = " ") %>%
+  filter(Bigram != "https t.co") %>%
+  count(Bigram, year, sort = TRUE) %>%
+  mutate(Bigram = reorder_within(Bigram, n, year)) %>% 
+  slice_max(n, n = 30) %>%
+  ggplot(aes(
+    x = fct_reorder(Bigram, n),
+    y = n,
+    fill = Bigram
+  )) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(vars(year), scales = "free_y", ncol = 2) +
+  scale_x_reordered() +
+  scale_x_reordered() +
+  theme(legend.position = "none") +
+  labs(
+    title = "The most words used (Bigram)",
+    subtitle = "Bar plot and facet wrap, The most words used (Bigram)",
+    caption = "Kaggle: All Trump's Twitter insults (2015-2021)",
+    x = "Bigram",
+    y = "Count"
+  )
+```
+
+We can see that by bigram the picture became more clear and faceting by the year gave the following:
+
+2016: Hillary Clinton, crooked Hillary, and Ted Cruz
+
+2017: fake news, news media, and falling NYTimes
+
+2018: again fake news, with hunt, news media, crooked Hillary and angry democrats.
+
+2019: more about, fake news, with hunt, radical left, news media, crooked Hilary and back to york times, adding nancy Pelosi and adam Schiff.
+
+2020: fake news, again! then sleepy joe, joe Biden, radical left, mini mike :), news media and adding impeachment hoax and news CNN.
+
+It was clear that president trump was so angry about news media, because as you can see from 2017-2020 the top bigram is fake news!
+
+let us check the trigram!
+
+
+## **Trigram:**
+
+
+```{r}
+TrumpTweet %>% select(tweet, year) %>%
+  unnest_tokens(Trigram, tweet, token = "ngrams", n = 3) %>%
+  separate(Trigram, c("word1", "word2", "word3"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word,!word2 %in% stop_words$word,!word3 %in% stop_words$word) %>%
+  unite(Trigram, word1, word2, word3, sep = " ") %>%
+  count(Trigram, year, sort = TRUE) %>%
+  mutate(Trigram = reorder_within(Trigram, n, year)) %>% 
+  slice_max(n, n = 20) %>%
+  ggplot(aes(
+    x = fct_reorder(Trigram, n),
+    y = n,
+    fill = Trigram
+  )) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(vars(year), scales = "free_y", ncol = 2) +
+  scale_x_reordered() +
+  theme(legend.position = "none") +
+  labs(
+    title = "The most words used (Trigram)",
+    subtitle = "Bar plot and facet wrap, The most words used (Trigram)",
+    caption = "Kaggle: All Trump's Twitter insults (2015-2021)",
+    x = "Trigram",
+    y = "Count"
+  )
+```
+
+It is crystal clear now:
+
+2016: crooked Hillary Clinton, Ted Cruz and, not surprisingly, goofy Elizabeth Warren.
+
+2017: fake news media and fake news CNN.
+
+2018: again fake news media, rigged with hunt, news media, crooked Hillary Clinton and 13 angry democrats.
+
+2019: more about, fake news media, sleepy joe Biden, with hunt, radical left democrats, crooked Hillary Clinton.
+
+2020: fake news media, again! then sleepy joe Biden, radical left, mini mike Bloomberg :) radical left democrats fake news CNN, adding crying chuk shumer,
+
+
+## **Quadgram:**
+
+
+you may say Trigram is enough to have the complete idea about Trump’s tweets targets, but I want to see what Quadgram, would give me, so i thought that removing the stop words may break the context so I decided to not remove them.
+
+
+```{r}
+TrumpTweet %>% select(tweet, year) %>%
+  unnest_tokens(Quadgram, tweet, token = "ngrams", n = 4) %>%
+  count(Quadgram, year, sort = TRUE) %>%
+  mutate(Quadgram = reorder_within(Quadgram, n, year)) %>% 
+  slice_max(n, n = 40) %>%
+  ggplot(aes(
+    x = fct_reorder(Quadgram, n),
+    y = n,
+    fill = Quadgram
+  )) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(vars(year), scales = "free_y", ncol = 2) +
+  scale_x_reordered() +
+  theme(legend.position = "none") +
+  labs(
+    title = "The most words used (Quadgram)",
+    subtitle = "Bar plot and facet wrap, The most words used (Quadgram)",
+    caption = "Kaggle: All Trump's Twitter insults (2015-2021)",
+    x = "Quadgram",
+    y = "Count"
+  )
+```
+
+Besides what we found by using Trigrams such as (crooked Hillary Clinton, fake news media, sleepy Joe Biden) we can notice that from 2019 to 2020 with adding the stop words the following quadgram such like do nothing democrats, the radical left democrats, but we will win, jeo biden and corrupt politician were highly appeared and used during Trump’s election campaigns.
+
+
+# Conclusion
+
+
+Now, Trump is not the presidents of the US, and I think he is going to keep tweeting and commenting on the US policy and strategy, despite the **Permanent suspension of @realDonaldTrump done by Twitter Inc.**
+
+[Read More.](https://blog.twitter.com/en_us/topics/company/2020/suspension.html)
+
+I hope to see new tweets to see the difference during presidency and after the presidency, because I believe by his tweets you can answer if of the following question, could Trump make a comeback in 2024?
